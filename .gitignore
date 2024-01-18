@@ -1,32 +1,83 @@
-# Prerequisites
-*.d
+Приёмный модуль
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+#include <SPI.h>
+#include "nRF24L01.h"
+#include "RF24.h"
 
-# Precompiled Headers
-*.gch
-*.pch
+RF24 radio(9, 10);  // создаем модуль на пинах 9 и 10 
 
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
+byte address[][6] = {"1Node", "2Node", "3Node", "4Node", "5Node", "6Node"}; //возможные номера «труб»
 
-# Fortran module files
-*.mod
-*.smod
+void setup() {
+  Serial.begin(9600);         // открываем порт для связи с ПК
+  radio.begin();              // активируем модуль
+  radio.setAutoAck(1);        // режим подтверждения приёма, 1 вкл 0 выкл
+  radio.setRetries(0, 15);    // (время между попыткой достучаться, число попыток)
+  radio.enableAckPayload();   // разрешить отсылку данных в ответ на входящий сигнал
+  radio.setPayloadSize(32);   // размер пакета, в байтах
 
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
+  radio.openReadingPipe(1, address[0]);   // хотим слушать трубу 0
+  radio.setChannel(0x5b);     // выбираем канал для связи
 
-# Executables
-*.exe
-*.out
-*.app
+  radio.setPALevel (RF24_PA_MAX);   // уровень мощности передатчика.
+  radio.setDataRate (RF24_250KBPS); // скорость обмена
+
+  radio.powerUp();        // начинаем работу
+  radio.startListening(); // начинаем слушать эфир
+}
+
+void loop() {
+  byte pipeNo, gotByte;
+  while (radio.available(&pipeNo)) {        // слушаем эфир со всех «труб»
+    radio.read(&gotByte, sizeof(gotByte));  // читаем входящий сигнал
+    Serial.print("Recieved: ");
+    Serial.println(gotByte);
+  }
+}
+
+Передающий модуль
+
+#include <microDS18B20.h> 
+#include <SPI.h>         
+#include "nRF24L01.h"     
+#include "RF24.h"         
+
+MicroDS18B20<2> ds; // создаем модуль для DS18B20 на пине 2
+RF24 radio(9, 10); //  создаем модуль на пинах 9 и 10
+
+byte address[][6] = {"1Node", "2Node", "3Node", "4Node", "5Node", "6Node"}; //возможные номера труб
+
+byte counter;
+
+void setup() {
+  Serial.begin(9600);         // открываем порт для связи с ПК
+
+  radio.begin();              // активировать модуль
+  radio.setAutoAck(1);        // режим подтверждения приёма, 1 вкл 0 выкл
+  radio.setRetries(0, 15);    // (время между попыткой достучаться, число попыток)
+  radio.enableAckPayload();   // разрешить отсылку данных в ответ на входящий сигнал
+  radio.setPayloadSize(32);   // размер пакета, в байтах
+
+  radio.openWritingPipe(address[0]);  // открываем канал для передачи данных
+  radio.setChannel(0x5b);             // выбираем канал
+
+  radio.setPALevel (RF24_PA_MAX);   // уровень мощности передатчика. 
+  radio.setDataRate (RF24_250KBPS); // скорость обмена. 
+
+  radio.powerUp();        // начать работу
+  radio.stopListening();  // не слушаем радиоэфир, мы передатчик
+}
+
+void loop() {
+  Serial.print("Sent: ");
+  Serial.println(counter);
+  radio.write(&counter, sizeof(counter));
+  counter++;
+  delay(10);
+  ds.requestTemp();
+  delay(1000);
+  if (ds.readTemp()) {
+    Serial.println(ds.getTemp());
+}
+}
+
